@@ -1,9 +1,5 @@
 # Segment Anything Models (SAM) API
 
-<img src="https://github.com/ksugar/samapi/releases/download/assets/qupath-samapi.gif" width="768">
-
-<img src="https://github.com/ksugar/samapi/releases/download/assets/qupath-sam-multipoint-live.gif" width="768">
-
 A web API for [SAM](https://github.com/facebookresearch/segment-anything) implemented with [FastAPI](https://fastapi.tiangolo.com).
 
 This is a part of the following paper. Please [cite](#citation) it when you use this project. You will also cite [the original SAM paper](https://arxiv.org/abs/2304.02643) and [the MobileSAM paper](https://arxiv.org/abs/2306.14289).
