@@ -2,9 +2,7 @@
 
 A web API for [SAM](https://github.com/facebookresearch/segment-anything) implemented with [FastAPI](https://fastapi.tiangolo.com).
 
-This is a part of the following paper. Please [cite](#citation) it when you use this project. You will also cite [the original SAM paper](https://arxiv.org/abs/2304.02643) and [the MobileSAM paper](https://arxiv.org/abs/2306.14289).
-
-- Sugawara, K. [*Training deep learning models for cell image segmentation with sparse annotations.*](https://biorxiv.org/cgi/content/short/2023.06.13.544786v1) bioRxiv 2023. doi:10.1101/2023.06.13.544786
+This is a modified version based on the project https://github.com/ksugar/samapi
 
 
 ## Install
@@ -288,7 +286,7 @@ The progress.
 
 ## Citation
 
-Please cite my paper on [bioRxiv](https://biorxiv.org/cgi/content/short/2023.06.13.544786v1).
+Please cite the following paper if you are using this project [bioRxiv](https://biorxiv.org/cgi/content/short/2023.06.13.544786v1).
 
 ```.bib
 @article {Sugawara2023.06.13.544786,
