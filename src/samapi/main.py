@@ -207,13 +207,56 @@ def get_sam_model(
     return sam
 
 
+def _log_gpu_memory_usage(device: str):
+    """
+    Logs GPU memory usage for the specified device.
+    :param device: Device string (e.g., 'cuda:0')
+    """
+    if device.startswith("cuda") and torch.cuda.is_available():
+        gpu_id = int(device.split(":")[-1]) if ":" in device else 0
+        if gpu_id < torch.cuda.device_count():
+            memory_allocated = torch.cuda.memory_allocated(gpu_id) / 1024**3  # GB
+            memory_reserved = torch.cuda.memory_reserved(gpu_id) / 1024**3   # GB
+            logger.info(f"GPU {gpu_id} Memory - Allocated: {memory_allocated:.2f}GB, Reserved: {memory_reserved:.2f}GB")
+
+
+def _get_worker_gpu_id() -> Optional[int]:
+    """
+    Gets the GPU ID for the current worker process based on process ID.
+    :return: GPU ID as int or None if not using multi-GPU
+    """
+    # Check if multi-GPU is enabled
+    multi_gpu_enabled = os.getenv("SAMAPI_MULTI_GPU", "false").lower() == "true"
+    if not multi_gpu_enabled or not torch.cuda.is_available():
+        return None
+    
+    # Get number of available GPUs
+    num_gpus = torch.cuda.device_count()
+    if num_gpus <= 1:
+        return None
+    
+    # Use process ID to determine GPU assignment
+    pid = os.getpid()
+    gpu_id = pid % num_gpus
+    
+    logger.info(f"Worker PID {pid} assigned to GPU {gpu_id} (out of {num_gpus} GPUs)")
+    return gpu_id
+
+
 def _get_device() -> str:
     """
     Selects the device to use for inference, based on what is available.
+    Supports multi-GPU assignment for different worker processes.
     :return: device as str
     """
     device = "cpu"
-    if torch.cuda.is_available():
+    
+    # Check for multi-GPU setup first
+    gpu_id = _get_worker_gpu_id()
+    if gpu_id is not None:
+        device = f"cuda:{gpu_id}"
+        logger.info(f"Using multi-GPU device: {device}")
+    elif torch.cuda.is_available():
         device = "cuda"
     elif torch.backends.mps.is_built():
         if torch.backends.mps.is_available():
@@ -228,7 +271,7 @@ def _get_device() -> str:
         warnings.warn("No GPU support found - using CPU for inference")
 
     # Make sure that the device is ready
-    if device in ("cuda", "mps"):
+    if device.startswith("cuda") or device == "mps":
         try:
             dummy_input = np.zeros((16, 16, 3), dtype=np.uint8)
             SamPredictor(get_sam_model(ModelType.vit_b).to(device=device)).set_image(
@@ -243,6 +286,7 @@ def _get_device() -> str:
 
 
 device = _get_device()
+_log_gpu_memory_usage(device)
 
 
 def register_state_dict_from_url(model_type: ModelType, url: str, name: str) -> bool:
@@ -296,6 +340,7 @@ last_checkpoint_url = None
 predictor = sam_predictor_registry[last_sam_type](
     get_sam_model(model_type=last_sam_type).to(device=device)
 )
+_log_gpu_memory_usage(device)
 last_image = None
 
 
@@ -306,6 +351,35 @@ async def get_version():
     :return: Version of the SAM API.
     """
     return __version__
+
+
+@app.get("/sam/gpu-status/")
+async def get_gpu_status():
+    """
+    Returns GPU status information including multi-GPU configuration.
+    :return: GPU status information.
+    """
+    status = {
+        "cuda_available": torch.cuda.is_available(),
+        "device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
+        "current_device": device,
+        "worker_pid": os.getpid(),
+        "multi_gpu_enabled": os.getenv("SAMAPI_MULTI_GPU", "false").lower() == "true",
+    }
+    
+    if torch.cuda.is_available():
+        gpu_info = []
+        for i in range(torch.cuda.device_count()):
+            gpu_info.append({
+                "id": i,
+                "name": torch.cuda.get_device_name(i),
+                "memory_allocated_gb": torch.cuda.memory_allocated(i) / 1024**3,
+                "memory_reserved_gb": torch.cuda.memory_reserved(i) / 1024**3,
+                "memory_total_gb": torch.cuda.get_device_properties(i).total_memory / 1024**3,
+            })
+        status["gpus"] = gpu_info
+    
+    return status
 
 
 class SAMWeightsBody(BaseModel):
@@ -460,6 +534,7 @@ async def predict_sam(body: SAMBody):
         last_sam_type = body.type
         last_checkpoint_url = body.checkpoint_url
         last_image = None
+        _log_gpu_memory_usage(device)
     if last_image != body.b64img:
         image = _parse_image(body)
         predictor.set_image(image)
@@ -535,6 +610,7 @@ async def automatic_mask_generator(body: SAMAutoMaskBody):
         last_sam_type = body.type
         last_checkpoint_url = body.checkpoint_url
         last_image = None
+        _log_gpu_memory_usage(device)
     if last_image != body.b64img:
         image = _parse_image(body)
         predictor.set_image(image)
@@ -701,6 +777,7 @@ async def video_predictor(body: SAMVideoBody):
         body.checkpoint_url,
         is_video=True,
     ).to(device=device)
+    _log_gpu_memory_usage(device)
 
     if body.dirname is not None:
         dir_path = Path(SAMAPI_ROOT_DIR) / "videos" / body.dirname

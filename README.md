@@ -58,6 +58,25 @@ export PYTORCH_ENABLE_MPS_FALLBACK=1 # Required for running on Apple silicon
 uvicorn samapi.main:app --workers 2
 ```
 
+#### Multi-GPU Support
+
+For multi-GPU setups, enable multi-GPU support by setting the `SAMAPI_MULTI_GPU` environment variable:
+
+```bash
+export SAMAPI_MULTI_GPU=true
+uvicorn samapi.main:app --workers 4  # Use number of workers equal to or multiple of GPU count
+```
+
+Each worker process will automatically be assigned to a different GPU based on the process ID. For example:
+- Worker 1 (PID 1001) → GPU 0
+- Worker 2 (PID 1002) → GPU 1  
+- Worker 3 (PID 1003) → GPU 0 (wrapping around)
+- Worker 4 (PID 1004) → GPU 1
+
+You can check GPU status and assignment by accessing the `/sam/gpu-status/` endpoint.
+
+#### Basic Usage
+
 The command above will launch a server at http://localhost:8000.
 
 ```
